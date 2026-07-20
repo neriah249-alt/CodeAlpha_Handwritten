@@ -33,6 +33,7 @@ Ce projet implémente un modèle de **Deep Learning (CNN)** capable de reconnaî
 ---
 
 ## 📁 Structure du projet
+```texte
 CodeAlpha_Handwritten/
 ├── data/                          # Images et visualisations
 │   ├── test_image.png             # Image de test personnalisée
@@ -53,7 +54,7 @@ CodeAlpha_Handwritten/
 ├── app.py                         # Application Streamlit interactive
 ├── requirements.txt               # Dépendances
 └── README.md                      # Ce fichier
-
+```
 
 ---
 
@@ -67,18 +68,20 @@ cd CodeAlpha_Handwritten
 
 2. Créer l'environnement virtuel
 
-bash
+
+```bash
 python -m venv venv
 venv\Scripts\activate  # Windows
 # source venv/bin/activate  # Mac/Linux
 
 3. Installer les dépendances
 
-bash
+```bash
 pip install -r requirements.txt
 
 🏋️ Entraînement du modèle CNN
-bash
+
+```bash
 cd src
 python train.py
 
@@ -92,7 +95,9 @@ Modèle sauvegardé dans models/best_model.h5
 Créer une image 28×28 pixels
 Fond noir, chiffre blanc
 📊 Visualisation des résultats
-bash
+
+
+```bash
 cd src
 python visualize.py
 
