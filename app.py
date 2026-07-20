@@ -1,164 +1,180 @@
 import streamlit as st
 import numpy as np
 from PIL import Image
+import pickle
+import os
 
-st.set_page_config(
-    page_title="🔢 Reconnaissance de Chiffres Manuscrits",
-    page_icon="🔢",
-    layout="centered"
-)
+st.set_page_config(page_title="CodeAlpha - Testez !", page_icon="🔢")
 
-# CSS
-st.markdown("""
-<style>
-    .main { background-color: #f8f9fa; }
-    .result-box {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 40px;
-        border-radius: 20px;
-        text-align: center;
-        color: white;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    }
-    .digit { font-size: 120px; font-weight: bold; margin: 0; line-height: 1; }
-    .info { font-size: 16px; margin-top: 10px; opacity: 0.9; }
-</style>
-""", unsafe_allow_html=True)
-
-# Header
 st.title("🔢 Reconnaissance de Chiffres Manuscrits")
-st.markdown("""
-<p style='text-align: center; color: #666; font-size: 18px;'>
-    <b>Projet Stage CodeAlpha — Machine Learning</b><br>
-    Deep Learning CNN avec TensorFlow & Keras
-</p>
-""", unsafe_allow_html=True)
+st.markdown("### Projet CodeAlpha — Machine Learning")
 
-st.markdown("---")
+st.info("""
+📌 **Note** : Ce modèle fonctionne mieux avec des chiffres bien formés, 
+centrés et avec un bon contraste.
+""")
 
-# Tabs
-tab1, tab2, tab3 = st.tabs(["🧪 Démo", "📊 Résultats", "ℹ️ À propos"])
+# ============================================
+# CHARGEMENT DU MODÈLE
+# ============================================
+@st.cache_resource
+def load_model():
+    model_path = 'src/rf_model.pkl'
+    if os.path.exists(model_path):
+        with open(model_path, 'rb') as f:
+            return pickle.load(f)
+    return None
 
-with tab1:
-    st.subheader("🎯 Teste avec un exemple MNIST")
+model = load_model()
+
+if model is None:
+    st.error("❌ Modèle non trouvé.")
+    st.stop()
+
+# ============================================
+# PRÉTRAITEMENT SIMPLE MAIS EFFICACE
+# ============================================
+def preprocess_simple(image):
+    """
+    Prétraitement simple et robuste
+    """
+    # 1. Convertir en niveaux de gris
+    if image.mode != 'L':
+        image = image.convert('L')
     
-    # Créer des exemples de chiffres MNIST
-    examples = {
-        "0": np.array([[0,0,0,1,1,0,0,0],
-                       [0,0,1,0,0,1,0,0],
-                       [0,1,0,0,0,0,1,0],
-                       [0,1,0,0,0,0,1,0],
-                       [0,1,0,0,0,0,1,0],
-                       [0,0,1,0,0,1,0,0],
-                       [0,0,0,1,1,0,0,0]]),
-        "7": np.array([[1,1,1,1,1,1,1,0],
-                       [0,0,0,0,0,1,0,0],
-                       [0,0,0,0,1,0,0,0],
-                       [0,0,0,1,0,0,0,0],
-                       [0,0,1,0,0,0,0,0],
-                       [0,1,0,0,0,0,0,0],
-                       [1,0,0,0,0,0,0,0]])
-    }
+    # 2. Redimensionner à 28x28
+    image = image.resize((28, 28), Image.Resampling.LANCZOS)
     
-    # Sélectionner un chiffre
-    digit_choice = st.selectbox("Choisis un chiffre :", list(examples.keys()))
+    # 3. Convertir en array numpy
+    img_array = np.array(image, dtype=np.float32)
     
+    # 4. Normaliser [0, 1]
+    img_array = img_array / 255.0
+    
+    # 5. Vérifier si inversion nécessaire (fond blanc)
+    mean_val = np.mean(img_array)
+    if mean_val > 0.5:
+        # Fond blanc → inverser
+        img_array = 1.0 - img_array
+    
+    # 6. Aplatir pour Random Forest
+    img_flat = img_array.flatten()
+    
+    return img_flat, img_array
+
+# ============================================
+# INTERFACE
+# ============================================
+uploaded_file = st.file_uploader("📎 Choisis une image (PNG, JPG, JPEG)", type=['png', 'jpg', 'jpeg'])
+
+if uploaded_file is not None:
     col1, col2 = st.columns(2)
     
     with col1:
-        # Afficher le chiffre
-        img = examples[digit_choice]
-        img_display = np.kron(img, np.ones((20, 20))) * 255
-        st.image(img_display, caption=f"Exemple : Chiffre {digit_choice}", use_column_width=True)
+        image = Image.open(uploaded_file)
+        st.image(image, caption="📸 Ton image", use_container_width=True)
     
     with col2:
-        # Résultat simulé (dans la vraie version, c'est le modèle CNN qui prédit)
+        # Prétraitement
+        img_flat, img_processed = preprocess_simple(image)
+        img_flat = img_flat.reshape(1, -1)
+        
+        # Prédire
+        prediction = model.predict(img_flat)[0]
+        proba = model.predict_proba(img_flat)[0]
+        confidence = np.max(proba)
+        
+        # Afficher le résultat
         st.markdown(f"""
-        <div class="result-box">
-            <p class="info">Chiffre prédit par le CNN</p>
-            <p class="digit">{digit_choice}</p>
-            <p class="info">Confiance : 99.50%</p>
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    padding: 30px; border-radius: 20px; text-align: center; color: white;">
+            <p style="font-size: 20px; margin: 0;">Chiffre prédit</p>
+            <p style="font-size: 100px; font-weight: bold; margin: 0;">{prediction}</p>
+            <p style="font-size: 18px;">Confiance : {confidence:.2%}</p>
         </div>
         """, unsafe_allow_html=True)
-    
-    st.info("""
-    💡 **Pour tester avec tes propres images :**
-    
-    Le modèle CNN complet fonctionne en local. Clone le repo et lance :
-    ```bash
-    pip install -r requirements.txt
-    streamlit run app.py
-    ```
-    """)
+        
+        # Statut selon confiance
+        if confidence > 0.5:
+            status_color = "#4CAF50"
+            status_text = "✅ Prédiction fiable"
+        elif confidence > 0.3:
+            status_color = "#FF9800"
+            status_text = "⚠️ Prédiction modérée"
+        else:
+            status_color = "#F44336"
+            status_text = "❌ Prédiction faible"
+        
+        st.markdown(f"""
+        <div style="padding: 15px; border-radius: 10px; 
+                    background-color: {status_color}20; border: 2px solid {status_color};
+                    text-align: center; margin: 10px 0;">
+            <span style="font-size: 20px; font-weight: bold; color: {status_color};">
+                {status_text}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Barres de probabilités
+        st.markdown("### 📊 Probabilités")
+        
+        cols = st.columns(10)
+        for i in range(10):
+            with cols[i]:
+                prob = proba[i]
+                height = int(prob * 100)
+                color = "#4CAF50" if i == prediction else "#2196F3"
+                
+                st.markdown(f"""
+                <div style="display: flex; flex-direction: column; align-items: center;">
+                    <div style="width: 20px; height: {height}px; 
+                         background: {color}; border-radius: 3px 3px 0 0; 
+                         min-height: 3px;">
+                    </div>
+                    <div style="font-size: 14px; font-weight: {'bold' if i == prediction else 'normal'}; 
+                                color: {'#4CAF50' if i == prediction else 'black'};">
+                        {i}
+                    </div>
+                    <div style="font-size: 9px; color: #888;">
+                        {prob:.1%}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
-with tab2:
-    st.subheader("📊 Performance du modèle")
-    
-    # Métriques
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Accuracy", "99.50%", "+2.3%")
-    col2.metric("Epochs", "22", "EarlyStopping")
-    col3.metric("Dataset", "70 000", "MNIST")
-    
-    # Graphique simple
-    import matplotlib.pyplot as plt
-    
-    fig, ax = plt.subplots(figsize=(10, 4))
-    epochs = list(range(1, 23))
-    accuracy = [0.85, 0.89, 0.92, 0.94, 0.95, 0.96, 0.965, 0.97, 0.975, 0.978,
-                0.98, 0.982, 0.984, 0.985, 0.986, 0.987, 0.988, 0.989, 0.99, 0.992,
-                0.993, 0.995]
-    
-    ax.plot(epochs, accuracy, 'b-', linewidth=2, marker='o', markersize=4)
-    ax.set_xlabel('Epoch')
-    ax.set_ylabel('Accuracy')
-    ax.set_title('Courbe d\'entraînement du modèle CNN')
-    ax.grid(True, alpha=0.3)
-    ax.set_ylim(0.8, 1.0)
-    
-    st.pyplot(fig)
-    
-    st.success("✅ Le modèle atteint 99.50% d'accuracy sur le dataset de test !")
-
-with tab3:
-    st.subheader("ℹ️ À propos du projet")
-    
+# ============================================
+# SIDEBAR
+# ============================================
+with st.sidebar:
+    st.markdown("---")
+    st.subheader("ℹ️ À propos")
     st.markdown("""
-    ### 🧠 Architecture du modèle CNN
+    **Modèle :** Random Forest
     
-    | Couche | Type | Paramètres |
-    |--------|------|-----------|
-    | 1-2 | Conv2D (32 filtres) | 320 + 9 248 |
-    | 3 | MaxPooling2D + Dropout | - |
-    | 4-5 | Conv2D (64 filtres) | 18 496 + 36 928 |
-    | 6 | MaxPooling2D + Dropout | - |
-    | 7 | Flatten | - |
-    | 8-9 | Dense (256) + Dropout | 803 072 |
-    | 10 | Dense (10) | 2 570 |
+    **Dataset :** MNIST (70 000 images)
     
-    **Total : ~870 000 paramètres**
-    
-    ### 📁 Structure du projet
-    
-    ```
-    CodeAlpha_Handwritten/
-    ├── app.py              ← Cette application
-    ├── src/
-    │   ├── train.py        # Entraînement du CNN
-    │   ├── model.py        # Architecture du modèle
-    │   ├── predict.py      # Prédiction sur images
-    │   └── visualize.py    # Visualisations
-    ├── models/
-    │   └── best_model.h5   # Modèle entraîné (99.5%)
-    └── requirements.txt
-    ```
-    
-    ### 🔗 Liens
-    
-    - **GitHub** : [Neriah249-alt/CodeAlpha_Handwritten](https://github.com/Neriah249-alt/CodeAlpha_Handwritten)
-    - **Stage** : CodeAlpha Machine Learning
+    **Prétraitement :**
+    - Niveaux de gris
+    - Redimensionnement 28x28
+    - Normalisation [0,1]
+    - Inversion automatique
     """)
-
-# Footer
-st.markdown("---")
-st.caption("🎓 Projet réalisé dans le cadre du stage Machine Learning — CodeAlpha")
+    
+    st.markdown("---")
+    st.subheader("📊 Seuils")
+    st.markdown("""
+    - ✅ > 50% : Fiable
+    - ⚠️ 30-50% : Modérée
+    - ❌ < 30% : Faible
+    """)
+    
+    st.markdown("---")
+    st.subheader("💡 Conseils")
+    st.markdown("""
+    1. **Fond blanc** + trait noir
+    2. Chiffre bien **centré**
+    3. Photo **bien éclairée**
+    4. Éviter les **ombres**
+    """)
+    
+    st.markdown("---")
+    st.caption("🎓 CodeAlpha Internship 2026 | Tâche 3")
